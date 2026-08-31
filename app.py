@@ -630,6 +630,41 @@ def display_metrics(df: pd.DataFrame) -> None:
     col6.metric("Active Calories", f"{active_energy_kcal:.1f} kcal" if pd.notna(active_energy_kcal) else "N/A")
 
 
+def format_record_day(value: pd.Timestamp | datetime | None) -> str:
+    if value is None or pd.isna(value):
+        return "N/A"
+    if isinstance(value, pd.Timestamp):
+        value = value.to_pydatetime()
+    return value.strftime("%b %d, %Y")
+
+
+def best_daily_value(metrics_frame: pd.DataFrame, column: str) -> tuple[float | None, str | None]:
+    if metrics_frame.empty or column not in metrics_frame.columns:
+        return None, None
+    series = pd.to_numeric(metrics_frame[column], errors="coerce").dropna()
+    if series.empty:
+        return None, None
+    best_day = series.idxmax()
+    return float(series.loc[best_day]), format_record_day(best_day)
+
+
+def longest_run_distance(df: pd.DataFrame) -> tuple[float | None, str | None, str | None]:
+    if df.empty:
+        return None, None, None
+    runs = df[df["activity_type"].fillna("").str.contains("run", case=False, na=False)]
+    if runs.empty:
+        return None, None, None
+
+    distances = pd.to_numeric(runs["total_distance_mi"], errors="coerce")
+    if distances.notna().any():
+        best_index = distances.idxmax()
+        best_row = runs.loc[best_index]
+        duration = best_row.get("duration_seconds")
+        duration_label = format_duration(float(duration)) if pd.notna(duration) else None
+        return float(distances.loc[best_index]), format_record_day(best_row.get("start_date_local")), duration_label
+    return None, None, None
+
+
 def render_map(
     route: RouteRecord,
     time_window: tuple[datetime, datetime] | None = None,
@@ -1105,13 +1140,15 @@ with st.sidebar:
     )
 
 filtered_df = apply_filters(df, selected_start, selected_end, selected_activity_types)
+metrics_samples, metrics_counts = st.session_state.get("health_metrics", ({}, {}))
+metrics_frame = build_metrics_frame(metrics_samples)
 
 # on_change="rerun" turns the tabs into a real session-state widget, so the
 # selected tab survives any rerun (e.g. flipping the health-metric toggle). A
 # plain stateless st.tabs remounts and snaps back to the first tab instead.
 # https://github.com/streamlit/streamlit/issues/8239
-TAB_NAMES = ["Workout Accumulator", "Individual Workout Route Inspector", "Health Metrics"]
-tab1, tab2, tab3 = st.tabs(
+TAB_NAMES = ["Workout Accumulator", "Individual Workout Route Inspector", "Records", "Health Metrics"]
+tab1, tab2, tab3, tab4 = st.tabs(
     TAB_NAMES,
     default=st.session_state.get("main_tabs", TAB_NAMES[0]),
     key="main_tabs",
@@ -1361,8 +1398,37 @@ with tab2:
         render_elevation_profile(selected_route, selected_workout)
 
 with tab3:
-    metrics_samples, metrics_counts = st.session_state.get("health_metrics", ({}, {}))
-    metrics_frame = build_metrics_frame(metrics_samples)
+    st.subheader("Personal Records")
+    best_steps, best_steps_day = best_daily_value(metrics_frame, "steps")
+    best_walk_run_m, best_walk_run_day = best_daily_value(metrics_frame, "walk_run_distance_m")
+    best_exercise_min, best_exercise_day = best_daily_value(metrics_frame, "exercise_minutes")
+    best_run_mi, best_run_day, best_run_duration = longest_run_distance(date_filtered_df)
+
+    record_cols = st.columns(4)
+    record_cols[0].metric(
+        "Most Steps (Day)",
+        f"{best_steps:,.0f}" if best_steps is not None else "N/A",
+        best_steps_day or "No data",
+    )
+    record_cols[1].metric(
+        "Most Miles (Day)",
+        f"{best_walk_run_m * 0.000621371:.2f} mi" if best_walk_run_m is not None else "N/A",
+        best_walk_run_day or "No data",
+    )
+    record_cols[2].metric(
+        "Most Exercise Minutes (Day)",
+        f"{best_exercise_min:,.0f} min" if best_exercise_min is not None else "N/A",
+        best_exercise_day or "No data",
+    )
+    record_cols[3].metric(
+        "Longest Run",
+        f"{best_run_mi:.2f} mi" if best_run_mi is not None else "N/A",
+        best_run_day or "No runs",
+    )
+    if best_run_duration is not None:
+        st.caption(f"Longest run duration: {best_run_duration}")
+
+with tab4:
 
     if metrics_frame.empty:
         found_counts = {name: count for name, count in metrics_counts.items() if count > 0}

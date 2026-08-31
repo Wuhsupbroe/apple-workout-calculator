@@ -22,6 +22,7 @@ A Streamlit app for exploring workouts and body measurements from an Apple Healt
 - Displays elevation and calculated speed in mph over timestamped route points.
 - Displays heart rate over time when Apple Health heart-rate samples are available.
 - Displays heart rate even when a workout has no matched GPS route.
+- Includes a Records tab with personal bests for most steps in a day, most miles in a day, most exercise minutes in a day, and longest run distance.
 - Tracks body measurements (weight, body fat percentage, height, resting heart rate, sleep duration, daily steps) plus daily move calories, exercise time, and stand time, and derived BMI and lean body mass, on a dedicated Health Metrics tab, with toggleable per-metric chart layers that follow the sidebar time frame. Also charts daily walking + running distance in miles from the export's `DistanceWalkingRunning` records for the selected range. Each device (Watch, iPhone) writes its own samples for the same walking, so the per-day value is the single most complete source total rather than the sum of every record — which is why it matches the Health app's own walking/running numbers.
 
 ## Requirements
@@ -108,6 +109,15 @@ Shows the latest available value for each tracked metric as rows of stat tiles (
 - **Stand (h)** — `applestandtime` records per calendar day, converted to hours; likewise the largest single-source total.
 
 Weight, body fat, height, and resting heart rate are carried forward to later days so the lines stay continuous between measurements; sleep, steps, walking + running distance, move calories, exercise, and stand are only plotted on days with data. New measurements can be added later by collecting them in `parse_health_metrics` in `health_parser.py` and registering a layer in `METRIC_LAYERS` in `app.py`.
+
+### Records
+
+Shows personal-best records from the currently loaded date range:
+
+- **Most Steps (Day)** — highest daily `stepcount` total
+- **Most Miles (Day)** — highest daily `distancewalkingrunning` total in miles
+- **Most Exercise Minutes (Day)** — highest daily `appleexercisetime` total
+- **Longest Run** — running workout with the highest recorded distance
 
 ## Route matching
 
